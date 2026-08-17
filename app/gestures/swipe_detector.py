@@ -1,11 +1,10 @@
 ﻿"""
-Swipe-down gesture detection.
+Directional swipe detection (down / left / right).
 
-Unlike static poses (fist, finger count), a swipe is motion over time,
-so this tracks the wrist's vertical position across recent frames and
-checks whether it moved downward by enough distance within a short
-time window - while the hand is held open, to avoid confusing this
-with an open-palm hand simply drifting down between other gestures.
+Tracks the wrist's position over a short rolling time window and reports
+whichever direction moved the most, as long as it crosses a minimum
+distance threshold - so a mostly-vertical movement with a little sideways
+drift still reads as "down", not as a diagonal false trigger.
 """
 
 import time
@@ -15,44 +14,51 @@ class SwipeDetector:
     def __init__(
         self,
         time_window: float = 0.5,
-        min_downward_distance: float = 0.25,
-        cooldown_time: float = 1.5,
+        min_distance: float = 0.25,
+        cooldown_time: float = 1.0,
     ) -> None:
         self.time_window = time_window
-        self.min_downward_distance = min_downward_distance
+        self.min_distance = min_distance
         self.cooldown_time = cooldown_time
 
-        self.history = []  # list of (timestamp, wrist_y)
+        self.history = []  # list of (timestamp, x, y)
         self.last_trigger_time = 0.0
 
-    def update(self, wrist_y, is_open_palm: bool) -> bool:
+    def update(self, wrist_x, wrist_y, is_open_palm: bool):
         """
-        Feed the current wrist Y-position (0-1 range) and whether the hand
-        is currently an open palm, once per frame. Returns True the moment
-        a downward swipe is confirmed.
+        Feed the current wrist (x, y) position (0-1 range) and whether the
+        hand is an open palm, once per frame. Returns "down", "left",
+        "right", or None.
         """
         now = time.time()
 
-        if not is_open_palm or wrist_y is None:
+        if not is_open_palm or wrist_x is None or wrist_y is None:
             self.history.clear()
-            return False
+            return None
 
         if now - self.last_trigger_time < self.cooldown_time:
-            return False  # still in cooldown from the last swipe
+            return None
 
-        self.history.append((now, wrist_y))
-        self.history = [(t, y) for t, y in self.history if now - t <= self.time_window]
+        self.history.append((now, wrist_x, wrist_y))
+        self.history = [(t, x, y) for t, x, y in self.history if now - t <= self.time_window]
 
         if len(self.history) < 2:
-            return False
+            return None
 
-        oldest_y = self.history[0][1]
-        newest_y = self.history[-1][1]
-        downward_movement = newest_y - oldest_y  # y increases downward in image coordinates
+        _, oldest_x, oldest_y = self.history[0]
+        _, newest_x, newest_y = self.history[-1]
+        dx = newest_x - oldest_x
+        dy = newest_y - oldest_y
 
-        if downward_movement >= self.min_downward_distance:
+        direction = None
+        if abs(dy) >= self.min_distance and abs(dy) >= abs(dx):
+            if dy > 0:
+                direction = "down"
+        elif abs(dx) >= self.min_distance and abs(dx) > abs(dy):
+            direction = "right" if dx > 0 else "left"
+
+        if direction is not None:
             self.history.clear()
             self.last_trigger_time = now
-            return True
 
-        return False
+        return direction
