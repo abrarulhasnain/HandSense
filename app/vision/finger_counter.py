@@ -51,3 +51,13 @@ def get_finger_states(hand_landmarks) -> list[int]:
 def count_fingers(hand_landmarks) -> int:
     """Returns how many fingers are extended (0-5) for a single hand."""
     return sum(get_finger_states(hand_landmarks))
+def get_palm_center(hand_landmarks):
+    """
+    Returns the average (x, y) of the wrist and finger-base joints -
+    a more stable tracking point than the wrist alone, since it's less
+    affected by wrist rotation during hand movement.
+    """
+    reference_points = [0, 5, 9, 13, 17]  # wrist + each finger's base joint
+    avg_x = sum(hand_landmarks[i].x for i in reference_points) / len(reference_points)
+    avg_y = sum(hand_landmarks[i].y for i in reference_points) / len(reference_points)
+    return avg_x, avg_y
