@@ -21,3 +21,11 @@ def send_next() -> None:
     keyboard.press(Key.right)
     keyboard.release(Key.right)
     print("[INFO] Sent Right Arrow (next).")
+
+def send_app_switch() -> None:
+    """Sends Alt+Tab to bring up the app switcher."""
+    keyboard.press(Key.alt)
+    keyboard.press(Key.tab)
+    keyboard.release(Key.tab)
+    keyboard.release(Key.alt)
+    print("[INFO] Sent Alt+Tab (app switcher).")

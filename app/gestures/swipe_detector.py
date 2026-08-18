@@ -1,10 +1,10 @@
 ﻿"""
-Directional swipe detection (down / left / right).
+Directional swipe detection (up / down / left / right).
 
 Tracks the hand's palm-center position over a short rolling time window
 and reports whichever direction moved the most, as long as it crosses a
 minimum distance threshold - so a mostly-vertical movement with a little
-sideways drift still reads as "down", not as a diagonal false trigger.
+sideways drift still reads as "down"/"up", not as a diagonal false trigger.
 
 Unlike static gestures (finger count, fist), this doesn't require a
 specific finger count - motion itself is the signal, since finger counts
@@ -31,8 +31,8 @@ class SwipeDetector:
     def update(self, hand_x, hand_y):
         """
         Feed the current palm-center (x, y) position (0-1 range) once per
-        frame, or (None, None) if no hand is detected. Returns "down",
-        "left", "right", or None.
+        frame, or (None, None) if no hand is detected. Returns "up",
+        "down", "left", "right", or None.
         """
         now = time.time()
 
@@ -56,8 +56,7 @@ class SwipeDetector:
 
         direction = None
         if abs(dy) >= self.min_distance and abs(dy) >= abs(dx):
-            if dy > 0:
-                direction = "down"
+            direction = "down" if dy > 0 else "up"
         elif abs(dx) >= self.min_distance and abs(dx) > abs(dy):
             direction = "right" if dx > 0 else "left"
 

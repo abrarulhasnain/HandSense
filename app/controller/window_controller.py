@@ -6,7 +6,9 @@ window messages and Win32 APIs.
 import win32gui
 import win32con
 import win32process
+import win32api
 import psutil
+import pywintypes
 
 # Never act on our own app's window, even if it happens to be focused
 PROTECTED_WINDOW_TITLES = ["HandSense"]
@@ -81,5 +83,19 @@ def find_window_by_process_name(process_name: str):
 
 def restore_and_focus_window(hwnd) -> None:
     """Restores a minimized window and brings it to the foreground."""
+    if not win32gui.IsWindow(hwnd):
+        print("[INFO] Window no longer exists - skipping restore.")
+        return
+
     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-    win32gui.SetForegroundWindow(hwnd)
+
+    # Windows blocks SetForegroundWindow from background processes unless
+    # there's been recent user input - simulating a harmless key tap
+    # satisfies that check reliably.
+    win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)
+    win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)
+
+    try:
+        win32gui.SetForegroundWindow(hwnd)
+    except pywintypes.error as error:
+        print(f"[INFO] Could not restore/focus window: {error}")

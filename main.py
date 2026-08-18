@@ -1,9 +1,8 @@
 ﻿"""
 Entry point for HandSense.
 
-Phase 8 (v2): Swipe detection now uses palm-center tracking and no longer
-requires a specific finger count, fixing missed detections caused by
-finger-count fluctuation during fast hand motion. Press 'q' to quit.
+Phase 9: Adds pinch-tap for screenshots, alongside finger-count app
+control, fist-close, and directional swipes. Press 'q' to quit.
 """
 
 import math
@@ -15,9 +14,11 @@ from app.vision.hand_detector import HandDetector
 from app.vision.finger_counter import count_fingers, get_palm_center
 from app.gestures.state_machine import GestureStateMachine
 from app.gestures.swipe_detector import SwipeDetector
+from app.gestures.pinch_detector import PinchDetector
 from app.controller.app_launcher import launch_app_for_gesture
 from app.controller.window_controller import close_active_window, minimize_active_window
-from app.controller.media_controller import send_previous, send_next
+from app.controller.media_controller import send_previous, send_next, send_app_switch
+from app.controller.screenshot_controller import take_screenshot
 
 MOVEMENT_SUPPRESS_THRESHOLD = 0.02  # per-frame palm movement that counts as "actively moving"
 
@@ -27,10 +28,11 @@ def main() -> None:
     detector = HandDetector()
     gesture_machine = GestureStateMachine(dwell_time=1.0, cooldown_time=1.0)
     swipe_detector = SwipeDetector()
+    pinch_detector = PinchDetector()
 
     last_hand_pos = None
 
-    print("HandSense - Phase 8 (v2): Directional Swipe")
+    print("HandSense - Phase 9: Pinch Screenshot")
     print("Press 'q' to quit.")
 
     while True:
@@ -45,12 +47,14 @@ def main() -> None:
         total_fingers = None
         hand_x = None
         hand_y = None
+        first_hand_landmarks = None
 
         if result.hand_landmarks:
             total_fingers = sum(
                 count_fingers(hand_landmarks) for hand_landmarks in result.hand_landmarks
             )
-            hand_x, hand_y = get_palm_center(result.hand_landmarks[0])
+            first_hand_landmarks = result.hand_landmarks[0]
+            hand_x, hand_y = get_palm_center(first_hand_landmarks)
 
         # Detect whether the hand is actively moving right now, so we can
         # avoid confirming a static number gesture mid-swipe.
@@ -63,10 +67,17 @@ def main() -> None:
                 is_moving = True
         last_hand_pos = current_hand_pos
 
+        if pinch_detector.update(first_hand_landmarks, is_moving):
+            print("[INFO] Pinch tap detected.")
+            take_screenshot()
+
         swipe_direction = swipe_detector.update(hand_x, hand_y)
         if swipe_direction == "down":
             print("[INFO] Swipe down detected.")
             minimize_active_window()
+        elif swipe_direction == "up":
+            print("[INFO] Swipe up detected.")
+            send_app_switch()
         elif swipe_direction == "left":
             print("[INFO] Swipe left detected.")
             send_previous()
@@ -74,10 +85,9 @@ def main() -> None:
             print("[INFO] Swipe right detected.")
             send_next()
 
-        # Only feed the finger count to the stability state machine when the
-        # hand isn't actively moving - prevents a mid-swipe pose from also
-        # being read as a held number gesture.
-        gesture_input = None if is_moving else total_fingers
+        # Suppress static number-gesture confirmation while the hand is
+        # moving or pinching, so those states don't get misread as a hold.
+        gesture_input = None if (is_moving or pinch_detector.is_pinching) else total_fingers
         confirmed_gesture = gesture_machine.update(gesture_input)
         if confirmed_gesture is not None:
             print(f"[INFO] Gesture confirmed: {confirmed_gesture}")
